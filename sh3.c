@@ -1,293 +1,154 @@
-//
-// Created by ricky on 17-5-14.
-//
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <fcntl.h>
+#include<stdio.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<string.h>
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<sys/wait.h>
+#include<fcntl.h>
 
-#define MAX_COMMAND_LENGTH 64
+#define MAX_L 100
+#define MAX_P 10
 
-/*
- * split a string and set the result to dst
- * dst string array, str splited string, the character for split
- * return the number of string
- *
- * */
-int split(char ***dst, char *str, char spliter)
-{
-    int str_num = 0;
-    int each_size;
-    int index = 0;
-    int str_index = 0;
-    int start_index = 0;
+char cmd[MAX_L];
+char param[MAX_P][MAX_L];
+char *para[MAX_P+1];
+int subcmd[MAX_P];
+int paramsize;
+int subcmdnum;
 
-    while (str[index] != '\0')
-    {
-        if (str[index] == spliter)
-        {
-            index++;
-            while(str[index] == spliter)
-            {
-                index++;
-            }
+void split(char str[]){
 
-            if (str[index] != '\0'){
-                str_num ++;
-            }
+    int scn=0;
+    int ps=0;
+    subcmd[scn++]=ps;
+    char *p=strtok(str," ");
+    while(p!=NULL){
+        strcpy(param[ps],p);
+
+        if(strcmp(p,"|")==0){
+            para[ps]=NULL;
+            subcmd[scn++]=ps+1;
+        }else{
+            para[ps]=param[ps];
         }
-        else
-        {
-            index++;
-        }
+
+        ps++;
+        p=strtok(NULL," ");
     }
-    str_num++;
-
-    *dst = (char **) malloc((str_num + 1)*sizeof(char*));
-    index = 0;
-
-    while (str[index] != '\0')
-    {
-        if (str[index] != spliter)
-        {
-            start_index = index;
-            each_size = 0;
-
-            while (str[index] != spliter && str[index] != '\0')
-            {
-                index++;
-                each_size++;
-            }
-
-            (*dst)[str_index] = (char*) malloc((each_size + 1)*sizeof(char));
-            int cur_i = 0;
-
-            while (start_index != index)
-            {
-                (*dst)[str_index][cur_i] = str[start_index];
-                start_index++;
-                cur_i++;
-            }
-
-            (*dst)[str_index][cur_i] = '\0';
-            str_index++;
-        }
-        else
-        {
-            index++;
-        }
-    }
-
-    (*dst)[str_num] = NULL;
-    return str_num;
+    para[ps]=NULL;
+    subcmdnum=scn;
+    paramsize=ps;
 }
 
-void freeArray(char ***array, int size)
-{
-    for (int i = 0; i < size; i++)
-    {
-        free((*array)[i]);
-    }
-    free(*array);
-}
-
-
-void inRedirect(char **strs, int *size) {
-	char f[30];
-	int fd;
-	char *str = strs[1];
-
-	if (str[0] == '<')
-	{
-		strcpy(f, str + 1);
-		fd = open(f, O_RDONLY, S_IRUSR|S_IWUSR);
-		strs[1] = NULL;
-		if (fd == -1) 
-		{
-			perror("input redirect error: open file fail!\n");
-			exit(1);
+void restore(){
+	for(int i=0;i<subcmdnum;i++){
+		for(int j=0;(para+subcmd[i])[j]!=NULL;j++){
+			printf("%s ",(para+subcmd[i])[j]);
 		}
-		dup2(fd, 0);
-		close(fd);
+		if(i!=subcmdnum-1){
+			printf("| ");
+		}
 	}
 
 }
 
-void outRedirect(char **strs, int *size) {
+void outRedirect(char **pa){
     char f[30];
     int fd;
-    char *str = strs[*size - 1];
+    strcpy(f,*pa+1);
+    *pa=NULL;
 
-    if (str[0] == '>') {
-        strcpy(f, str + 1);
-        strs[*size - 1] = NULL;
-        *size = *size - 1;
-
-        fd = open(f,O_RDWR|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
-        if (fd == -1) {
-            perror("Create new file fail.\n");
-            exit(1);
-        }
-        dup2(fd, 1);
-		close(fd);
+    fd=creat(f,444);
+    if(fd==-1){
+        perror("Create new file fail.\n");
+        exit(1);
     }
+    dup2(fd,STDOUT_FILENO);
+    close(fd);
 }
 
-int inCommand(char **strs) {
-
-    if (strcmp(strs[0], "exit") == 0) {
-        return 1;
-    } else if (strcmp(strs[0], "cd") == 0) {
-        chdir(strs[1]);
-        return 0;
+void tes(char *a[]){
+    int i=0;
+    while(a[i]!=NULL){
+        printf("%s ",a[i++]);
     }
-
-    return -1;
+    printf("\n");
 }
 
-/**
- * ´ÓÃüÁî×Ö·û´®Êý×éÖÐÈ¡³ö×ÓÊý×é 
- * @param strs  Ô­ÃüÁî×Ö·û´®Êý×é
- * @param sub   ×ÓÃüÁî×Ö·û´®Êý×é
- * @param start ¿ªÊ¼Î»ÖÃ
- * @param end   ½áÊøÎ»ÖÃ
- */
-void setSubStrings(char **strs, char ***sub, int start, int end)
-{
-	int size = end - start;
-    int each_size;
+void main(){
+    int pid,fstdin,fstdout,res,count;
+    int pfd[4][2];
 
-    *sub = (char **)malloc((size + 1)*sizeof(char*));
+    fstdin=dup(STDIN_FILENO);
+	fstdout=dup(STDOUT_FILENO);
 
-    for (int i = 0; i < size; ++i)
-    {
-        each_size = strlen(strs[start + 1]);
-        (*sub)[i] = (char *)malloc((each_size + 1) * sizeof(char));
-        strcpy((*sub)[i], strs[start + i]);
-    }
-}
+    for(;;){//å¤–å±‚å¾ªçŽ¯é¢„å¤„ç†
 
-void myExecute(char **strs, int size)
-{
-    int current_index = 0;
-    int start_index = 0;
+		fgets(cmd,MAX_L,stdin);
+        cmd[strlen(cmd)-1]='\0';
+        split(cmd);
+		//restore();
 
-    while (current_index < size)
-    {
-        if (strs[current_index] != NULL)
-        {
-            if (strcmp(strs[current_index], "|") == 0)
-            {
-                pid_t spid;
-                int pfd[2];
-
-                int ret = pipe(pfd);
-                if (ret == -1)
-                {
-                    perror("create pipe fail!\n");
-                    exit(1);
-                }
-
-                spid = fork();
-                if (spid == 0)
-                {
-                    //child process
-                    dup2(pfd[1], 1);
-
-                    close(pfd[0]);
-                    close(pfd[1]);
-
-                    char **sub;
-                    setSubStrings(strs, &sub, start_index, current_index);
-
-                    ret = execvp(sub[0], sub);
-                    if (ret == -1)
-                    {
-                        perror("execute fail\n");
-                        exit(1);
-                    }
-                }
-                else if (spid > 0)
-                {
-                    dup2(pfd[0], 0);
-
-                    close(pfd[0]);
-                    close(pfd[1]);
-
-                    start_index = current_index + 1;
-                }
-            }
-        }
-    }
-
-    if (start_index == 0)
-    {
-        int ret = execvp(strs[0], strs);
-        if (ret == -1)
-        {
-            perror("execute fail\n");
-            exit(1);
-        }
-    }
-    else
-    {
-        char **sub;
-        setSubStrings(strs, &sub, start_index, current_index);
-
-        int ret = execvp(sub[0], sub);
-        if (ret == -1)
-        {
-            perror("execute fail\n");
-            exit(1);
-        }
-    }
-}
-
-int main(int argc, char *argv[]) {
-    int size;
-    char cmd[MAX_COMMAND_LENGTH];
-    char **strs;
-    pid_t pid;
-    int ret;
-
-    for (; ;)
-   	{
-        fgets(cmd, MAX_COMMAND_LENGTH, stdin);
-
-        size = strlen(cmd);
-        cmd[size - 1] = '\0';
-
-        size = split(&strs, cmd, ' ');
-
-        ret = inCommand(strs);
-        if (ret == 1) {
+        if(strcmp(para[0],"exit")==0){
             break;
-        } else if (ret == 0) {
+        }else if(strcmp(para[0],"cd")==0){
+            chdir(para[1]);
             continue;
         }
 
-        pid = fork();
+        count=0;
 
-        if (pid < 0) {
+        while(count<subcmdnum-1){
+			res=pipe(pfd[count]);
+			if(res!=0){
+        		perror("Create pipe fail!\n");
+        		exit(1);
+    		}
+
+            pid=fork();
+            if(pid<0){
+                printf("Create process fail! count=%d\n",count);
+                exit(1);
+            }else if(pid==0){
+                dup2(pfd[count][1],STDOUT_FILENO);
+                close(pfd[count][0]);
+                close(pfd[count][1]);
+                res=execvp(para[subcmd[count]],para+subcmd[count]);
+				if(res==-1){
+					printf("child:Execute fail! count=%d\n",count);
+					exit(1);
+				}
+                exit(0);
+            }else{
+        		dup2(pfd[count][0],STDIN_FILENO);
+                close(pfd[count][0]);
+                close(pfd[count][1]);
+				//printf("father:count=%d\n",count);
+				count++;
+            }
+        }
+
+        pid=fork();
+        if(pid<0){
             perror("Create process fail!\n");
             exit(1);
-        }
-        else if (pid == 0) 
-		{
-			
-            myExecute(strs, size);
-			
-        }
-        
-        else {
+        }else if(pid==0){
+            if(para[paramsize-1][0]=='>'){
+				//printf("%s\n",para[paramsize-1]);
+                outRedirect(&para[paramsize-1]);
+            }
+            res=execvp(para[subcmd[count]],para+subcmd[count]);
+            if(res==-1){
+                printf("child:Execute fail! count=%d\n",count);
+                exit(1);
+            }
+			exit(0);
+        }else{
+			//printf("father:count=%d\n",count);
             wait(NULL);
-            freeArray(&strs, size);
         }
+        dup2(fstdin,STDIN_FILENO);
+		dup2(fstdout,STDOUT_FILENO);
     }
-
-    return 0;
 }
