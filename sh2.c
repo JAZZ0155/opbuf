@@ -34,7 +34,7 @@ void outRedirect(char **pa){
     strcpy(f,*pa+1);
     *pa=NULL;
 
-    fd=creat(f,666);
+    fd=creat(f,444);
     if(fd==-1){
         perror("Create new file fail.\n");
         exit(1);

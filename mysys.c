@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <stdlib.h>
 #include <string.h>
+
 void mysys(char input[]){
     //假设参数小于4个
 
@@ -27,12 +28,6 @@ void mysys(char input[]){
     }
     argv[argc]=NULL;
 
-//    result=strtok(input,delims);
-//    while(result!=NULL){
-//        argv[argc++]=result;
-//        result=strtok(NULL,delims);
-//    }
-
     int pid;
     pid=fork();
     if(pid==0){
@@ -54,13 +49,11 @@ void mysys(char input[]){
     }
 
     wait(NULL);
-
 }
 
 int main(int argc,char **argv){
     char *input="echo HELLO WORLD";
     printf("------------\n");
-   // mysys(input)
     mysys("echo HELLO WORLD");
     printf("------------\n");
     system("ls /");
